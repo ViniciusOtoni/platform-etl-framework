@@ -1,0 +1,26 @@
+# CI: ruff + pytest + build. CD: em tags vX.Y.Z publica o wheel (GitHub Release) e move a tag major.
+name: python
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  ci:
+    uses: ViniciusOtoni/platform-cicd-workflows/.github/workflows/ci-python.yml@v1
+    with:
+      install-command: pip install -e ".[dev]"
+
+  release:
+    needs: ci
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: ViniciusOtoni/platform-cicd-workflows/.github/workflows/cd-python-release.yml@v1
+
+  major-tag:
+    needs: release
+    uses: ViniciusOtoni/platform-cicd-workflows/.github/workflows/cd-major-tag.yml@v1

@@ -1,0 +1,167 @@
+# Contrato ODCS v3.2.0 do stream de eventos do agregado Pedido (Published Language do BC Pedidos).
+# Fonte única (ADR-0005): os JSON Schemas em contracts/schemas/ são GERADOS por `edp-contracts generate`.
+apiVersion: v3.2.0
+kind: DataContract
+id: urn:datacontract:pedidos:pedido:v1
+name: Eventos do agregado Pedido
+version: 1.1.0
+status: active
+domain: pedidos
+dataProduct: pedidos-eventos
+tenant: event-driven-platform-study
+
+description:
+  purpose: >
+    Eventos de integração do ciclo de vida do Pedido (Event-Carried State Transfer).
+    Consumidos pelo BC Pagamentos e pelo Lakehouse.
+  usage: Reconstruir o estado e o histórico dos pedidos sem acessar o banco transacional.
+  limitations: Consistência eventual; entrega at-least-once (deduplicar pelo id do CloudEvent).
+
+schema:
+  - name: pedido_criado
+    businessName: PedidoCriado
+    physicalName: pedidos.pedido.criado.v1
+    logicalType: object
+    physicalType: event
+    description: Um pedido foi criado pelo cliente e aguarda pagamento.
+    properties:
+      - name: pedido_id
+        logicalType: string
+        logicalTypeOptions:
+          format: uuid
+        required: true
+        primaryKey: true
+        primaryKeyPosition: 1
+        description: Identidade do agregado (UUID). Chave de partição no Event Hubs.
+      - name: aggregate_version
+        logicalType: integer
+        logicalTypeOptions:
+          minimum: 1
+        required: true
+        description: Versão do agregado após este evento (começa em 1).
+      - name: cliente_id
+        logicalType: string
+        required: true
+        classification: confidential
+      - name: itens
+        logicalType: array
+        required: true
+        logicalTypeOptions:
+          minItems: 1
+        items:
+          name: item
+          logicalType: object
+          properties:
+            - name: sku
+              logicalType: string
+              required: true
+            - name: quantidade
+              logicalType: integer
+              logicalTypeOptions:
+                minimum: 1
+              required: true
+            - name: preco_unitario
+              logicalType: number
+              logicalTypeOptions:
+                minimum: 0
+              required: true
+      - name: valor_total
+        logicalType: number
+        logicalTypeOptions:
+          exclusiveMinimum: 0
+        required: true
+        quality:
+          - type: sql
+            description: Valor total deve ser positivo
+            query: SELECT COUNT(*) FROM ${object} WHERE valor_total <= 0
+            mustBe: 0
+      - name: moeda
+        logicalType: string
+        logicalTypeOptions:
+          pattern: "^[A-Z]{3}$"
+        required: true
+        description: ISO 4217.
+      - name: criado_em
+        logicalType: timestamp
+        required: true
+
+  - name: pedido_confirmado
+    businessName: PedidoConfirmado
+    physicalName: pedidos.pedido.confirmado.v1
+    logicalType: object
+    physicalType: event
+    description: O pagamento do pedido foi aprovado e o pedido foi confirmado.
+    properties:
+      - name: pedido_id
+        logicalType: string
+        logicalTypeOptions:
+          format: uuid
+        required: true
+        primaryKey: true
+        primaryKeyPosition: 1
+      - name: aggregate_version
+        logicalType: integer
+        logicalTypeOptions:
+          minimum: 2
+        required: true
+      - name: status
+        logicalType: string
+        required: true
+        enum:
+          - value: CONFIRMADO
+      - name: confirmado_em
+        logicalType: timestamp
+        required: true
+
+  - name: pedido_cancelado
+    businessName: PedidoCancelado
+    physicalName: pedidos.pedido.cancelado.v1
+    logicalType: object
+    physicalType: event
+    description: Um pedido foi cancelado (pelo cliente ou por recusa de pagamento).
+    properties:
+      - name: pedido_id
+        logicalType: string
+        logicalTypeOptions:
+          format: uuid
+        required: true
+        primaryKey: true
+        primaryKeyPosition: 1
+      - name: aggregate_version
+        logicalType: integer
+        logicalTypeOptions:
+          minimum: 2
+        required: true
+      - name: motivo
+        logicalType: string
+        required: true
+        enum:
+          - value: CLIENTE_DESISTIU
+          - value: PAGAMENTO_RECUSADO
+          - value: FRAUDE
+      - name: cancelado_por
+        logicalType: string
+        required: true
+        enum:
+          - value: CLIENTE
+          - value: SISTEMA
+      - name: cancelado_em
+        logicalType: timestamp
+        required: true
+
+slaProperties:
+  - property: latency
+    value: 15
+    unit: m
+
+team:
+  name: pedidos
+  members:
+    - username: ViniciusOtoni
+      role: owner
+
+customProperties:
+  - property: eventHub
+    value: pedidos.pedido.v1
+  - property: partitionKey
+    value: pedido_id

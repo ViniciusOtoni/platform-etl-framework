@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "edp-etl"
+version = "0.1.0"
+description = "Framework Silver da plataforma: valida eventos contra o contrato ODCS, deduplica, reconstrói o estado do agregado e aplica as regras de qualidade."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+# pyspark é fornecido pelo runtime Databricks (serverless); só é instalado no extra de desenvolvimento.
+dependencies = [
+  "pyyaml>=6,<7",
+  "edp-contracts @ https://github.com/ViniciusOtoni/platform-contracts-tooling/releases/download/v0.1.0/edp_contracts-0.1.0-py3-none-any.whl",
+]
+
+[project.optional-dependencies]
+dev = ["pyspark==4.0.*", "pytest>=8", "ruff>=0.8"]
+
+[project.scripts]
+edp-etl = "edp_etl.main:main"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/edp_etl"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
